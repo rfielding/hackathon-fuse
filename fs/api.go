@@ -562,6 +562,16 @@ type FileAllocater interface {
 	Allocate(ctx context.Context, off uint64, size uint64, mode uint32) syscall.Errno
 }
 
+type JwtData struct {
+	Claims JwtClaims `json:"claims,omitempty"`
+}
+type JwtClaims struct {
+	Values map[string][]string `json:"values,omitempty"`
+}
+
+// Plugin jwt data here
+var JwtInput JwtData
+
 // Options sets options for the entire filesystem
 type Options struct {
 	// MountOptions contain the options for mounting the fuse server
@@ -594,9 +604,6 @@ type Options struct {
 	// files.), which is necessary for doing a chdir into the FUSE
 	// directories.
 	NullPermissions bool
-
-	// A richer permission system than UID GID
-	Claims map[string][]string
 
 	// If nonzero, replace default (zero) UID with the given UID
 	UID uint32

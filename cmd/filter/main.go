@@ -17,6 +17,7 @@ import (
 	"runtime/pprof"
 	"syscall"
 	"time"
+
 	"github.com/rfielding/hackathon-fuse/fs"
 )
 
@@ -38,7 +39,6 @@ func writeMemProfile(fn string, sigs <-chan os.Signal) {
 		}
 	}
 }
-
 
 func main() {
 	log.SetFlags(log.Lmicroseconds)
@@ -94,11 +94,12 @@ func main() {
 		// making benchmarking easier.
 		AttrTimeout:  &sec,
 		EntryTimeout: &sec,
-		Claims: map[string][]string{
-			"email": []string{"rob.fielding@gmail.com","rrr00bb@yahoo.com"},
-			"role": []string{"developer","tableflipper"},
-		},
 	}
+	fs.JwtInput.Claims.Values = map[string][]string{
+		"email": []string{flag.Arg(2), "rrr00bb@yahoo.com"},
+		"role":  []string{"developer", "tableflipper"},
+	}
+	fmt.Printf("\nrun as: %s", flag.Arg(2))
 	opts.Debug = *debug
 	opts.AllowOther = *other
 	if opts.AllowOther {
