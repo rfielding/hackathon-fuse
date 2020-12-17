@@ -17,8 +17,7 @@ import (
 	"runtime/pprof"
 	"syscall"
 	"time"
-
-	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/rfielding/hackathon-fuse/fs"
 )
 
 func writeMemProfile(fn string, sigs <-chan os.Signal) {
@@ -39,6 +38,7 @@ func writeMemProfile(fn string, sigs <-chan os.Signal) {
 		}
 	}
 }
+
 
 func main() {
 	log.SetFlags(log.Lmicroseconds)

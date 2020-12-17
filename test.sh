@@ -1,11 +1,13 @@
 #!/bin/bash
 
 (
+  go mod vendor
+  go mod tidy
   cd cmd/filter
-  rmdir filter
-  mkdir filter
-  ( go run main.go filter /tmp ) &
+  rmdir dfilter
+  mkdir dfilter
+  ( go run main.go dfilter /tmp ) &
   sleep 2
-  ls -al filter
-  umount filter
+  ls -al dfilter
+  umount dfilter
 ) 
