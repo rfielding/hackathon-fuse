@@ -6,11 +6,15 @@ package fs
 
 import (
 	"context"
+	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/open-policy-agent/opa/rego"
 )
 
 type loopbackRoot struct {
@@ -277,6 +281,9 @@ func (n *loopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *loopbackNode) Open(ctx context.Context, flags uint32) (fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
+	if !canIOpen(p) {
+		return nil, 0, 255
+	}
 	f, err := syscall.Open(p, int(flags), 0)
 	if err != nil {
 		return nil, 0, ToErrno(err)
@@ -286,7 +293,11 @@ func (n *loopbackNode) Open(ctx context.Context, flags uint32) (fh FileHandle, f
 }
 
 func (n *loopbackNode) Opendir(ctx context.Context) syscall.Errno {
-	fd, err := syscall.Open(n.path(), syscall.O_DIRECTORY, 0755)
+	p := n.path()
+	if !canIOpen(p) {
+		return 255
+	}
+	fd, err := syscall.Open(p, syscall.O_DIRECTORY, 0755)
 	if err != nil {
 		return ToErrno(err)
 	}
@@ -303,6 +314,9 @@ func (n *loopbackNode) Getattr(ctx context.Context, f FileHandle, out *fuse.Attr
 		return f.(FileGetattrer).Getattr(ctx, out)
 	}
 	p := n.path()
+	if !canIOpen(p) {
+		return 255
+	}
 
 	var err error
 	st := syscall.Stat_t{}
@@ -385,6 +399,54 @@ func (n *loopbackNode) Setattr(ctx context.Context, f FileHandle, in *fuse.SetAt
 		out.FromStat(&st)
 	}
 	return OK
+}
+
+func canIOpen(p string) bool {
+	regoFileName := p
+	if !strings.HasPrefix(filepath.Base(p), ".rego-") {
+		regoFileName = filepath.Dir(p) + "/.rego-" + filepath.Base(p)
+	}
+	fd, err := os.Open(regoFileName)
+	if err == nil {
+		defer fd.Close()
+		fdBytes, err := ioutil.ReadAll(fd)
+		if err != nil {
+			log.Printf("error getting file bytes: %v", err)
+			return false
+		}
+		eval, err := evalRego(JwtInput, string(fdBytes))
+		if err != nil {
+			log.Printf("error evaluating rego: %v", err)
+			return false
+		}
+		openOk, ok := eval["X"].(bool)
+		if openOk && ok {
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+func evalRego(claims interface{}, opaObj string) (map[string]interface{}, error) {
+	ctx := context.TODO()
+
+	compiler := rego.New(
+		rego.Query("data.policy"),
+		rego.Module("policy.rego", opaObj),
+	)
+
+	query, err := compiler.PrepareForEval(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := query.Eval(ctx, rego.EvalInput(claims))
+	if err != nil {
+		return nil, err
+	}
+	return results[0].Expressions[0].Value.(map[string]interface{}), nil
 }
 
 // NewLoopbackRoot returns a root node for a loopback file system whose

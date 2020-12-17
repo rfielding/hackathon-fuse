@@ -16,5 +16,11 @@
   done
   echo
   ls -al dfilter
+  echo
+  echo cat dfilter/notice.txt:
+  cat dfilter/notice.txt
+  echo
+  echo cat dfilter/resume.txt:
+  cat dfilter/resume.txt
   umount dfilter
 ) 

@@ -5,7 +5,6 @@
 package fs
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -16,7 +15,6 @@ import (
 	"unsafe"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/open-policy-agent/opa/rego"
 )
 
 type loopbackDirStream struct {
@@ -133,7 +131,7 @@ func (ds *loopbackDirStream) canList(name, regoFileName string) {
 			ds.nextResult = nil
 			ds.loadResult = 0
 		}
-		eval, err := ds.evalRego(JwtInput, string(fdBytes))
+		eval, err := evalRego(JwtInput, string(fdBytes))
 		if err != nil {
 			log.Printf("error: %v", err)
 			ds.nextResult = nil
@@ -147,27 +145,6 @@ func (ds *loopbackDirStream) canList(name, regoFileName string) {
 			ds.loadResult = 0
 		}
 	}
-}
-
-func (ds *loopbackDirStream) evalRego(claims interface{}, opaObj string) (map[string]interface{}, error) {
-	ctx := context.TODO()
-
-	compiler := rego.New(
-		rego.Query("data.policy"),
-		rego.Module("policy.rego", opaObj),
-	)
-
-	query, err := compiler.PrepareForEval(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	results, err := query.Eval(ctx, rego.EvalInput(claims))
-	if err != nil {
-		return nil, err
-	}
-	return results[0].Expressions[0].Value.(map[string]interface{}), nil
 }
 
 func (ds *loopbackDirStream) load() syscall.Errno {
