@@ -5,6 +5,7 @@
 package fs
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -23,13 +24,14 @@ type loopbackDirStream struct {
 	name       string
 	nextResult *fuse.DirEntry
 	loadResult syscall.Errno
+	ctx        context.Context
 	// Protects fd so we can guard against double close
 	mu sync.Mutex
 	fd int
 }
 
 // NewLoopbackDirStream open a directory for reading as a DirStream
-func NewLoopbackDirStream(name string) (DirStream, syscall.Errno) {
+func NewLoopbackDirStream(ctx context.Context, name string) (DirStream, syscall.Errno) {
 	fd, err := syscall.Open(name, syscall.O_DIRECTORY, 0755)
 	if err != nil {
 		return nil, ToErrno(err)
@@ -39,6 +41,7 @@ func NewLoopbackDirStream(name string) (DirStream, syscall.Errno) {
 		name: name,
 		buf:  make([]byte, 4096),
 		fd:   fd,
+		ctx:  ctx,
 	}
 
 	if err := ds.load(); err != 0 {

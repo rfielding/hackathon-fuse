@@ -281,7 +281,7 @@ func (n *loopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *loopbackNode) Open(ctx context.Context, flags uint32) (fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
-	if !canIOpen(p) {
+	if !canIOpen(ctx, p) {
 		return nil, 0, 255
 	}
 	f, err := syscall.Open(p, int(flags), 0)
@@ -294,7 +294,7 @@ func (n *loopbackNode) Open(ctx context.Context, flags uint32) (fh FileHandle, f
 
 func (n *loopbackNode) Opendir(ctx context.Context) syscall.Errno {
 	p := n.path()
-	if !canIOpen(p) {
+	if !canIOpen(ctx, p) {
 		return 255
 	}
 	fd, err := syscall.Open(p, syscall.O_DIRECTORY, 0755)
@@ -306,7 +306,7 @@ func (n *loopbackNode) Opendir(ctx context.Context) syscall.Errno {
 }
 
 func (n *loopbackNode) Readdir(ctx context.Context) (DirStream, syscall.Errno) {
-	return NewLoopbackDirStream(n.path())
+	return NewLoopbackDirStream(ctx, n.path())
 }
 
 func (n *loopbackNode) Getattr(ctx context.Context, f FileHandle, out *fuse.AttrOut) syscall.Errno {
@@ -314,7 +314,7 @@ func (n *loopbackNode) Getattr(ctx context.Context, f FileHandle, out *fuse.Attr
 		return f.(FileGetattrer).Getattr(ctx, out)
 	}
 	p := n.path()
-	if !canIOpen(p) {
+	if !canIOpen(ctx, p) {
 		return 255
 	}
 
@@ -401,7 +401,7 @@ func (n *loopbackNode) Setattr(ctx context.Context, f FileHandle, in *fuse.SetAt
 	return OK
 }
 
-func canIOpen(p string) bool {
+func canIOpen(ctx context.Context, p string) bool {
 	regoFileName := p
 	if !strings.HasPrefix(filepath.Base(p), ".rego-") {
 		regoFileName = filepath.Dir(p) + "/.rego-" + filepath.Base(p)
