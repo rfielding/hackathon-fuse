@@ -595,6 +595,9 @@ type Options struct {
 	// directories.
 	NullPermissions bool
 
+	// A richer permission system than UID GID
+	Claims map[string][]string
+
 	// If nonzero, replace default (zero) UID with the given UID
 	UID uint32
 

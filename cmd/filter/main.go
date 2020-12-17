@@ -94,6 +94,10 @@ func main() {
 		// making benchmarking easier.
 		AttrTimeout:  &sec,
 		EntryTimeout: &sec,
+		Claims: map[string][]string{
+			"email": []string{"rob.fielding@gmail.com","rrr00bb@yahoo.com"},
+			"role": []string{"developer","tableflipper"},
+		},
 	}
 	opts.Debug = *debug
 	opts.AllowOther = *other
