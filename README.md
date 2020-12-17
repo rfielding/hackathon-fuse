@@ -4,8 +4,13 @@ FUSE Hackathon
 Implement a fuse filesystem for generic filtering tasks.
 
 ```
-# run as rob.fielding@gmail.com
-./test.sh rob.fielding@gmail.com
 
-# run as danica.fielding@gmail.com
-./test.sh danica.fielding@gmail.com
+./test.sh '{"claims":{"values":{"company":["ford","decipher"],"email":["joe.fielding@gmail.com"]}}}'
+
+./test.sh '{"claims":{"values":{"company":["mcd"],"email":["bob@gmail.com"]}}}'
+
+./test.sh '{"claims":{"values":{"email":["danica.fielding@gmail.com"]}}}'
+
+./test.sh '{"claims":{"values":{"email":["some@yahoo.com"]}}}'
+
+```

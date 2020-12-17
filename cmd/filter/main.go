@@ -8,6 +8,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -95,9 +96,9 @@ func main() {
 		AttrTimeout:  &sec,
 		EntryTimeout: &sec,
 	}
-	fs.JwtInput.Claims.Values = map[string][]string{
-		"email": []string{flag.Arg(2), "rrr00bb@yahoo.com"},
-		"role":  []string{"developer", "tableflipper"},
+	err = json.Unmarshal([]byte(flag.Arg(2)), &fs.JwtInput)
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("\nrun as: %s", flag.Arg(2))
 	opts.Debug = *debug
@@ -124,7 +125,7 @@ func main() {
 		log.Fatalf("Mount fail: %v\n", err)
 	}
 	if !*quiet {
-		fmt.Println("Mounted!")
+		fmt.Println("\nMounted!\n")
 	}
 	server.Wait()
 }
