@@ -1,10 +1,9 @@
 #!/bin/bash
 
 checkIt() {
-  who=$1
-  spid=$$
+  ./filter --jwtsign usa --jwtclaims ${who}claims.json --jwtout ${who}.jwt
   echo ---------------- ${who} ${spid} ---------------
-  curl -X POST --data-binary @${who}.jwt http://127.0.0.1:9494/jwt-for-pid/${spid}
+  curl -X POST --data-binary @${who}.jwt http://127.0.0.1:9494/jwt-for-pid
   for f in dmount/.rego-*
   do
     echo
@@ -25,24 +24,23 @@ checkIt() {
   go mod vendor
   go mod tidy
   cd cmd/filter
-  go run main.go --makekeypair usa
+  go build
+  ./filter --makekeypair usa
   echo USA signs off on our JWTs
   ls -al usa.*
-  go run main.go --jwtsign usa --jwtclaims robclaims.json > rob.jwt
-  go run main.go --jwtsign usa --jwtclaims danicaclaims.json > danica.jwt
-  ls -al *.jwt
   umount dmount
   rmdir dmount
   mkdir dmount
-  ( go run main.go dmount originalData $1 ) &
+  ( ./filter dmount originalData $1 ) &
   sleep 5
   who=rob
   spid=$$
-  curl -X POST --data-binary @${who}.jwt http://127.0.0.1:9494/jwt-for-pid/${spid}
   (
-    checkIt danica
+    who=danica
+    checkIt
   )
   (
-    checkIt rob
+    who=rob
+    checkIt
   )
 ) 

@@ -17,7 +17,6 @@ import (
 	"os/signal"
 	"path"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -53,6 +52,7 @@ func main() {
 	keypairCreate := flag.String("makekeypair", "", "make keypair for jwt signing")
 	jwtSign := flag.String("jwtsign", "", "sign a jwt")
 	jwtClaims := flag.String("jwtclaims", "", "actual jwt claims to sign")
+	jwtOut := flag.String("jwtout", "", "where to write the jwt out")
 	ro := flag.Bool("ro", false, "mount read-only")
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to this file")
 	memprofile := flag.String("memprofile", "", "write memory profile to this file")
@@ -73,7 +73,11 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("%s\n", fs.Sign(*jwtSign, string(claimBytes)))
+		sig := fs.Sign(*jwtSign, string(claimBytes))
+		err = ioutil.WriteFile(*jwtOut, []byte(sig), 0700)
+		if err != nil {
+			panic(err)
+		}
 		os.Exit(0)
 	}
 
@@ -143,36 +147,27 @@ func main() {
 	}
 
 	// Set up an http server for signalling out of band
-	http.HandleFunc("/jwt-for-pid/", func(res http.ResponseWriter, req *http.Request) {
+	http.HandleFunc("/jwt-for-pid", func(res http.ResponseWriter, req *http.Request) {
 		log.Printf("got a request")
 		if req.Method == "POST" {
-			tokens := strings.Split(req.RequestURI, "/")
-			if len(tokens) > 2 {
-				body, err := ioutil.ReadAll(req.Body)
-				if err != nil {
-					res.WriteHeader(http.StatusInternalServerError)
-					res.Write([]byte(err.Error()))
-					return
-				}
-
-				pid, err := strconv.ParseInt(tokens[2], 10, 32)
-				if err != nil {
-					res.WriteHeader(http.StatusInternalServerError)
-					res.Write([]byte(err.Error()))
-					return
-				}
-				jwtBytes := strings.Trim(string(body), " \t\r\n")
-				authenticated, err := fs.Authenticate(fs.FindIssuer(string(jwtBytes)), jwtBytes)
-				if err != nil {
-					res.WriteHeader(http.StatusInternalServerError)
-					res.Write([]byte(err.Error()))
-					return
-				}
-				log.Printf("map pid %d to %s", pid, fs.AsJsonPretty(authenticated))
-				var j fs.JwtData
-				j.Claims.Values = authenticated.Values
-				fs.JwtDataByPid[uint32(pid)] = &j
+			body, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				res.WriteHeader(http.StatusInternalServerError)
+				res.Write([]byte(err.Error()))
+				return
 			}
+			jwtBytes := strings.Trim(string(body), " \t\r\n")
+			authenticated, err := fs.Authenticate(fs.FindIssuer(string(jwtBytes)), jwtBytes)
+			if err != nil {
+				res.WriteHeader(http.StatusInternalServerError)
+				res.Write([]byte(err.Error()))
+				return
+			}
+			pid := authenticated.Pid
+			log.Printf("map pid %d to %s", pid, fs.AsJsonPretty(authenticated))
+			var j fs.JwtData
+			j.Claims.Values = authenticated.Values
+			fs.JwtDataByPid[uint32(pid)] = &j
 		}
 	})
 	go http.ListenAndServe("127.0.0.1:9494", nil)

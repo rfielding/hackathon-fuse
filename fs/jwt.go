@@ -22,6 +22,7 @@ import (
 
 	jwt "github.com/dgrijalva/jwt-go"
 	jwk "github.com/lestrrat/go-jwx/jwk"
+	ps "github.com/mitchellh/go-ps"
 )
 
 type UserPolicy struct {
@@ -33,6 +34,7 @@ type UserPolicy struct {
 	Issuer   string              `json:"iss,omitempty" bson:"iss,omitempty"`
 	Audience string              `json:"aud,omitempty" bson:"aud,omitempty"`
 	Values   map[string][]string `json:"values,omitempty" bson:"values,omitempty"`
+	Pid      int                 `json:"pid,omitempty"`
 }
 
 func AsJsonPretty(v interface{}) string {
@@ -123,6 +125,19 @@ func Sign(issuer string, claims string) string {
 	return jwt
 }
 
+func showPidTree(pid int) {
+	p, err := ps.FindProcess(int(pid))
+	if err != nil {
+		log.Printf("error looking up heirarchy for pid: %d", pid)
+		return
+	}
+	ppid := int(p.PPid())
+	log.Printf("pid[%d]: %d %s", os.Getpid(), pid, p.Executable())
+	if ppid > 0 {
+		showPidTree(ppid)
+	}
+}
+
 func GetJWT(s string, privkey *ecdsa.PrivateKey, issuer string) (string, error) {
 	var up UserPolicy
 	err := json.Unmarshal([]byte(s), &up)
@@ -133,6 +148,8 @@ func GetJWT(s string, privkey *ecdsa.PrivateKey, issuer string) (string, error) 
 	now := time.Now()
 	up.ExpiresAt = now.Add(duration).Unix()
 	up.Issuer = issuer
+	up.Pid = os.Getppid()
+	showPidTree(os.Getpid())
 
 	s2, err := json.MarshalIndent(up, "", "  ")
 	if err != nil {
