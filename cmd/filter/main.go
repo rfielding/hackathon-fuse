@@ -8,7 +8,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -162,15 +161,16 @@ func main() {
 					res.Write([]byte(err.Error()))
 					return
 				}
-
-				log.Printf("map pid %d to %s", pid, string(body))
-				var j fs.JwtData
-				err = json.Unmarshal(body, &j)
+				jwtBytes := strings.Trim(string(body), " \t\r\n")
+				authenticated, err := fs.Authenticate(fs.FindIssuer(string(jwtBytes)), jwtBytes)
 				if err != nil {
 					res.WriteHeader(http.StatusInternalServerError)
 					res.Write([]byte(err.Error()))
 					return
 				}
+				log.Printf("map pid %d to %s", pid, fs.AsJsonPretty(authenticated))
+				var j fs.JwtData
+				j.Claims.Values = authenticated.Values
 				fs.JwtDataByPid[uint32(pid)] = &j
 			}
 		}

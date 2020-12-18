@@ -4,7 +4,7 @@ checkIt() {
   who=$1
   spid=$$
   echo ---------------- ${who} ${spid} ---------------
-  curl -X POST --data-binary @${who}claims.json http://127.0.0.1:9494/jwt-for-pid/${spid}
+  curl -X POST --data-binary @${who}.jwt http://127.0.0.1:9494/jwt-for-pid/${spid}
   for f in dmount/.rego-*
   do
     echo
@@ -38,7 +38,7 @@ checkIt() {
   sleep 5
   who=rob
   spid=$$
-  curl -X POST --data-binary @${who}claims.json http://127.0.0.1:9494/jwt-for-pid/${spid}
+  curl -X POST --data-binary @${who}.jwt http://127.0.0.1:9494/jwt-for-pid/${spid}
   (
     checkIt danica
   )

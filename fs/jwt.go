@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"math/big"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
@@ -31,6 +33,30 @@ type UserPolicy struct {
 	Issuer   string              `json:"iss,omitempty" bson:"iss,omitempty"`
 	Audience string              `json:"aud,omitempty" bson:"aud,omitempty"`
 	Values   map[string][]string `json:"values,omitempty" bson:"values,omitempty"`
+}
+
+func AsJsonPretty(v interface{}) string {
+	b, _ := json.MarshalIndent(v, "", "  ")
+	return string(b)
+}
+
+func FindIssuer(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) == 3 {
+		claimsData, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(parts[1])
+		if err != nil {
+			log.Printf("error decoding jwt claims: %v", err)
+			return ""
+		}
+		var up UserPolicy
+		err = json.Unmarshal(claimsData, &up)
+		if err != nil {
+			log.Printf("error unmarshalling jwt claims: %v", err)
+			return ""
+		}
+		return up.Issuer
+	}
+	return ""
 }
 
 func Authenticate(issuer string, token string) (*UserPolicy, error) {
