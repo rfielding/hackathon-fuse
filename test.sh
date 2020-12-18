@@ -25,6 +25,12 @@ checkIt() {
   go mod vendor
   go mod tidy
   cd cmd/filter
+  go run main.go --makekeypair usa
+  echo USA signs off on our JWTs
+  ls -al usa.*
+  go run main.go --jwtsign usa --jwtclaims robclaims.json > rob.jwt
+  go run main.go --jwtsign usa --jwtclaims danicaclaims.json > danica.jwt
+  ls -al *.jwt
   umount dmount
   rmdir dmount
   mkdir dmount

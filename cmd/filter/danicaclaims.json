@@ -1,8 +1,6 @@
 {
-	"claims": {
-		"values": {
-			"company": ["vwa"],
-			"email": ["danica.fielding@gmail.com"]
-		}
+	"values": {
+		"company": ["vwa"],
+		"email": ["danica.fielding@gmail.com"]
 	}
 }

@@ -51,10 +51,33 @@ func main() {
 	debug := flag.Bool("debug", false, "print debugging messages.")
 	other := flag.Bool("allow-other", false, "mount with -o allowother.")
 	quiet := flag.Bool("q", false, "quiet")
+	keypairCreate := flag.String("makekeypair", "", "make keypair for jwt signing")
+	jwtSign := flag.String("jwtsign", "", "sign a jwt")
+	jwtClaims := flag.String("jwtclaims", "", "actual jwt claims to sign")
 	ro := flag.Bool("ro", false, "mount read-only")
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to this file")
 	memprofile := flag.String("memprofile", "", "write memory profile to this file")
 	flag.Parse()
+
+	if *keypairCreate != "" {
+		privName := fmt.Sprintf("%s.priv", *keypairCreate)
+		pubName := fmt.Sprintf("%s.pub", *keypairCreate)
+		err := fs.JwtKeygen(privName, pubName)
+		if err != nil {
+			panic(err)
+		}
+		os.Exit(0)
+	}
+
+	if *jwtSign != "" {
+		claimBytes, err := ioutil.ReadFile(*jwtClaims)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("%s\n", fs.Sign(*jwtSign, string(claimBytes)))
+		os.Exit(0)
+	}
+
 	if flag.NArg() < 2 {
 		fmt.Printf("usage: %s MOUNTPOINT ORIGINAL\n", path.Base(os.Args[0]))
 		fmt.Printf("\noptions:\n")
