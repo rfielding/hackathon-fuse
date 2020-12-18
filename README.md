@@ -5,12 +5,12 @@ Implement a fuse filesystem for generic filtering tasks.
 
 ```
 
-./test.sh '{"claims":{"values":{"company":["ford","decipher"],"email":["joe.fielding@gmail.com"]}}}'
+./test.sh '{"claims":{"values":{"company":["ford","decipher"],"email":["rob.fielding@gmail.com"]}}}' rob
 
-./test.sh '{"claims":{"values":{"company":["mcd"],"email":["bob@gmail.com"]}}}'
+./test.sh '{"claims":{"values":{"company":["mcd"],"email":["bob@gmail.com"]}}}' bob
 
-./test.sh '{"claims":{"values":{"email":["danica.fielding@gmail.com"]}}}'
+./test.sh '{"claims":{"values":{"email":["danica.fielding@gmail.com"]}}}' danica
 
-./test.sh '{"claims":{"values":{"email":["some@yahoo.com"]}}}'
+./test.sh '{"claims":{"values":{"email":["some@yahoo.com"]}}}' some
 
 ```
