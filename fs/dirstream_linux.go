@@ -134,7 +134,8 @@ func (ds *loopbackDirStream) canList(name, regoFileName string) {
 			ds.nextResult = nil
 			ds.loadResult = 0
 		}
-		eval, err := evalRego(JwtInput, string(fdBytes))
+		jwtClaims := ds.ctx.Value(jwtKey).(*JwtData)
+		eval, err := evalRego(jwtClaims, string(fdBytes))
 		if err != nil {
 			log.Printf("error: %v", err)
 			ds.nextResult = nil

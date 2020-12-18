@@ -96,7 +96,7 @@ func main() {
 		AttrTimeout:  &sec,
 		EntryTimeout: &sec,
 	}
-	err = json.Unmarshal([]byte(flag.Arg(2)), &fs.JwtInput)
+	err = json.Unmarshal([]byte(flag.Arg(2)), &opts.JwtInput)
 	if err != nil {
 		panic(err)
 	}

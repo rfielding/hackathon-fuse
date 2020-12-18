@@ -49,10 +49,10 @@ type ServerCallbacks interface {
 }
 
 type rawBridge struct {
-	options Options
-	root    *Inode
-	server  ServerCallbacks
-
+	options  Options
+	root     *Inode
+	server   ServerCallbacks
+	JwtInput JwtData
 	// mu protects the following data.  Locks for inodes must be
 	// taken before rawBridge.mu
 	mu           sync.Mutex
@@ -290,7 +290,7 @@ func (b *rawBridge) inode(id uint64, fh uint64) (*Inode, *fileEntry) {
 
 func (b *rawBridge) Lookup(cancel <-chan struct{}, header *fuse.InHeader, name string, out *fuse.EntryOut) fuse.Status {
 	parent, _ := b.inode(header.NodeId, 0)
-	ctx := &fuse.Context{Caller: header.Caller, Cancel: cancel}
+	ctx := &Context{header.Caller, cancel, b.options.JwtInput}
 	child, errno := b.lookup(ctx, parent, name, out)
 
 	if errno != 0 {
@@ -306,7 +306,7 @@ func (b *rawBridge) Lookup(cancel <-chan struct{}, header *fuse.InHeader, name s
 	return fuse.OK
 }
 
-func (b *rawBridge) lookup(ctx *fuse.Context, parent *Inode, name string, out *fuse.EntryOut) (*Inode, syscall.Errno) {
+func (b *rawBridge) lookup(ctx *Context, parent *Inode, name string, out *fuse.EntryOut) (*Inode, syscall.Errno) {
 	if lu, ok := parent.ops.(NodeLookuper); ok {
 		return lu.Lookup(ctx, name, out)
 	}
@@ -331,7 +331,7 @@ func (b *rawBridge) Rmdir(cancel <-chan struct{}, header *fuse.InHeader, name st
 	parent, _ := b.inode(header.NodeId, 0)
 	var errno syscall.Errno
 	if mops, ok := parent.ops.(NodeRmdirer); ok {
-		errno = mops.Rmdir(&fuse.Context{Caller: header.Caller, Cancel: cancel}, name)
+		errno = mops.Rmdir(&Context{header.Caller, cancel, b.options.JwtInput}, name)
 	}
 
 	if errno == 0 {
@@ -344,7 +344,7 @@ func (b *rawBridge) Unlink(cancel <-chan struct{}, header *fuse.InHeader, name s
 	parent, _ := b.inode(header.NodeId, 0)
 	var errno syscall.Errno
 	if mops, ok := parent.ops.(NodeUnlinker); ok {
-		errno = mops.Unlink(&fuse.Context{Caller: header.Caller, Cancel: cancel}, name)
+		errno = mops.Unlink(&Context{header.Caller, cancel, b.options.JwtInput}, name)
 	}
 
 	if errno == 0 {
@@ -359,7 +359,7 @@ func (b *rawBridge) Mkdir(cancel <-chan struct{}, input *fuse.MkdirIn, name stri
 	var child *Inode
 	var errno syscall.Errno
 	if mops, ok := parent.ops.(NodeMkdirer); ok {
-		child, errno = mops.Mkdir(&fuse.Context{Caller: input.Caller, Cancel: cancel}, name, input.Mode, out)
+		child, errno = mops.Mkdir(&Context{input.Caller, cancel, b.options.JwtInput}, name, input.Mode, out)
 	} else {
 		return fuse.ENOTSUP
 	}
@@ -388,7 +388,7 @@ func (b *rawBridge) Mknod(cancel <-chan struct{}, input *fuse.MknodIn, name stri
 	var child *Inode
 	var errno syscall.Errno
 	if mops, ok := parent.ops.(NodeMknoder); ok {
-		child, errno = mops.Mknod(&fuse.Context{Caller: input.Caller, Cancel: cancel}, name, input.Mode, input.Rdev, out)
+		child, errno = mops.Mknod(&Context{input.Caller, cancel, b.options.JwtInput}, name, input.Mode, input.Rdev, out)
 	}
 
 	if errno != 0 {
@@ -402,7 +402,7 @@ func (b *rawBridge) Mknod(cancel <-chan struct{}, input *fuse.MknodIn, name stri
 }
 
 func (b *rawBridge) Create(cancel <-chan struct{}, input *fuse.CreateIn, name string, out *fuse.CreateOut) fuse.Status {
-	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
+	ctx := &Context{input.Caller, cancel, b.options.JwtInput}
 	parent, _ := b.inode(input.NodeId, 0)
 
 	var child *Inode
@@ -454,7 +454,7 @@ func (b *rawBridge) GetAttr(cancel <-chan struct{}, input *fuse.GetAttrIn, out *
 		}
 		b.mu.Unlock()
 	}
-	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
+	ctx := &Context{input.Caller, cancel, b.options.JwtInput}
 	return errnoToStatus(b.getattr(ctx, n, f, out))
 }
 
@@ -487,7 +487,7 @@ func (b *rawBridge) getattr(ctx context.Context, n *Inode, f FileHandle, out *fu
 }
 
 func (b *rawBridge) SetAttr(cancel <-chan struct{}, in *fuse.SetAttrIn, out *fuse.AttrOut) fuse.Status {
-	ctx := &fuse.Context{Caller: in.Caller, Cancel: cancel}
+	ctx := &Context{in.Caller, cancel, b.options.JwtInput}
 
 	fh, _ := in.GetFh()
 
@@ -510,7 +510,7 @@ func (b *rawBridge) Rename(cancel <-chan struct{}, input *fuse.RenameIn, oldName
 	p2, _ := b.inode(input.Newdir, 0)
 
 	if mops, ok := p1.ops.(NodeRenamer); ok {
-		errno := mops.Rename(&fuse.Context{Caller: input.Caller, Cancel: cancel}, oldName, p2.ops, newName, input.Flags)
+		errno := mops.Rename(&Context{input.Caller, cancel, b.options.JwtInput}, oldName, p2.ops, newName, input.Flags)
 		if errno == 0 {
 			if input.Flags&RENAME_EXCHANGE != 0 {
 				p1.ExchangeChild(oldName, p2, newName)
@@ -529,7 +529,7 @@ func (b *rawBridge) Link(cancel <-chan struct{}, input *fuse.LinkIn, name string
 	target, _ := b.inode(input.Oldnodeid, 0)
 
 	if mops, ok := parent.ops.(NodeLinker); ok {
-		child, errno := mops.Link(&fuse.Context{Caller: input.Caller, Cancel: cancel}, target.ops, name, out)
+		child, errno := mops.Link(&Context{input.Caller, cancel, b.options.JwtInput}, target.ops, name, out)
 		if errno != 0 {
 			return errnoToStatus(errno)
 		}
@@ -546,7 +546,7 @@ func (b *rawBridge) Symlink(cancel <-chan struct{}, header *fuse.InHeader, targe
 	parent, _ := b.inode(header.NodeId, 0)
 
 	if mops, ok := parent.ops.(NodeSymlinker); ok {
-		child, status := mops.Symlink(&fuse.Context{Caller: header.Caller, Cancel: cancel}, target, name, out)
+		child, status := mops.Symlink(&Context{header.Caller, cancel, b.options.JwtInput}, target, name, out)
 		if status != 0 {
 			return errnoToStatus(status)
 		}
@@ -563,7 +563,7 @@ func (b *rawBridge) Readlink(cancel <-chan struct{}, header *fuse.InHeader) (out
 	n, _ := b.inode(header.NodeId, 0)
 
 	if linker, ok := n.ops.(NodeReadlinker); ok {
-		result, errno := linker.Readlink(&fuse.Context{Caller: header.Caller, Cancel: cancel})
+		result, errno := linker.Readlink(&Context{header.Caller, cancel, b.options.JwtInput})
 		if errno != 0 {
 			return nil, errnoToStatus(errno)
 		}
@@ -578,7 +578,7 @@ func (b *rawBridge) Readlink(cancel <-chan struct{}, header *fuse.InHeader) (out
 func (b *rawBridge) Access(cancel <-chan struct{}, input *fuse.AccessIn) fuse.Status {
 	n, _ := b.inode(input.NodeId, 0)
 
-	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
+	ctx := &Context{input.Caller, cancel, b.options.JwtInput}
 	if a, ok := n.ops.(NodeAccesser); ok {
 		return errnoToStatus(a.Access(ctx, input.Mask))
 	}
@@ -603,7 +603,7 @@ func (b *rawBridge) GetXAttr(cancel <-chan struct{}, header *fuse.InHeader, attr
 	n, _ := b.inode(header.NodeId, 0)
 
 	if xops, ok := n.ops.(NodeGetxattrer); ok {
-		nb, errno := xops.Getxattr(&fuse.Context{Caller: header.Caller, Cancel: cancel}, attr, data)
+		nb, errno := xops.Getxattr(&Context{header.Caller, cancel, b.options.JwtInput}, attr, data)
 		return nb, errnoToStatus(errno)
 	}
 
@@ -613,7 +613,7 @@ func (b *rawBridge) GetXAttr(cancel <-chan struct{}, header *fuse.InHeader, attr
 func (b *rawBridge) ListXAttr(cancel <-chan struct{}, header *fuse.InHeader, dest []byte) (sz uint32, status fuse.Status) {
 	n, _ := b.inode(header.NodeId, 0)
 	if xops, ok := n.ops.(NodeListxattrer); ok {
-		sz, errno := xops.Listxattr(&fuse.Context{Caller: header.Caller, Cancel: cancel}, dest)
+		sz, errno := xops.Listxattr(&Context{header.Caller, cancel, b.options.JwtInput}, dest)
 		return sz, errnoToStatus(errno)
 	}
 	return 0, fuse.OK
@@ -622,7 +622,7 @@ func (b *rawBridge) ListXAttr(cancel <-chan struct{}, header *fuse.InHeader, des
 func (b *rawBridge) SetXAttr(cancel <-chan struct{}, input *fuse.SetXAttrIn, attr string, data []byte) fuse.Status {
 	n, _ := b.inode(input.NodeId, 0)
 	if xops, ok := n.ops.(NodeSetxattrer); ok {
-		return errnoToStatus(xops.Setxattr(&fuse.Context{Caller: input.Caller, Cancel: cancel}, attr, data, input.Flags))
+		return errnoToStatus(xops.Setxattr(&Context{input.Caller, cancel, b.options.JwtInput}, attr, data, input.Flags))
 	}
 	return fuse.ENOATTR
 }
@@ -630,7 +630,7 @@ func (b *rawBridge) SetXAttr(cancel <-chan struct{}, input *fuse.SetXAttrIn, att
 func (b *rawBridge) RemoveXAttr(cancel <-chan struct{}, header *fuse.InHeader, attr string) fuse.Status {
 	n, _ := b.inode(header.NodeId, 0)
 	if xops, ok := n.ops.(NodeRemovexattrer); ok {
-		return errnoToStatus(xops.Removexattr(&fuse.Context{Caller: header.Caller, Cancel: cancel}, attr))
+		return errnoToStatus(xops.Removexattr(&Context{header.Caller, cancel, b.options.JwtInput}, attr))
 	}
 	return fuse.ENOATTR
 }
@@ -639,7 +639,7 @@ func (b *rawBridge) Open(cancel <-chan struct{}, input *fuse.OpenIn, out *fuse.O
 	n, _ := b.inode(input.NodeId, 0)
 
 	if op, ok := n.ops.(NodeOpener); ok {
-		f, flags, errno := op.Open(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Flags)
+		f, flags, errno := op.Open(&Context{input.Caller, cancel, b.options.JwtInput}, input.Flags)
 		if errno != 0 {
 			return errnoToStatus(errno)
 		}
@@ -680,11 +680,11 @@ func (b *rawBridge) Read(cancel <-chan struct{}, input *fuse.ReadIn, buf []byte)
 	n, f := b.inode(input.NodeId, input.Fh)
 
 	if fops, ok := n.ops.(NodeReader); ok {
-		res, errno := fops.Read(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, buf, int64(input.Offset))
+		res, errno := fops.Read(&Context{Caller: input.Caller, Cancel: cancel}, f.file, buf, int64(input.Offset))
 		return res, errnoToStatus(errno)
 	}
 	if fr, ok := f.file.(FileReader); ok {
-		res, errno := fr.Read(&fuse.Context{Caller: input.Caller, Cancel: cancel}, buf, int64(input.Offset))
+		res, errno := fr.Read(&Context{input.Caller, cancel, b.options.JwtInput}, buf, int64(input.Offset))
 		return res, errnoToStatus(errno)
 	}
 
@@ -695,10 +695,10 @@ func (b *rawBridge) GetLk(cancel <-chan struct{}, input *fuse.LkIn, out *fuse.Lk
 	n, f := b.inode(input.NodeId, input.Fh)
 
 	if lops, ok := n.ops.(NodeGetlker); ok {
-		return errnoToStatus(lops.Getlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
+		return errnoToStatus(lops.Getlk(&Context{input.Caller, cancel, b.options.JwtInput}, f.file, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
 	}
 	if gl, ok := f.file.(FileGetlker); ok {
-		return errnoToStatus(gl.Getlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
+		return errnoToStatus(gl.Getlk(&Context{input.Caller, cancel, b.options.JwtInput}, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
 	}
 	return fuse.ENOTSUP
 }
@@ -706,20 +706,20 @@ func (b *rawBridge) GetLk(cancel <-chan struct{}, input *fuse.LkIn, out *fuse.Lk
 func (b *rawBridge) SetLk(cancel <-chan struct{}, input *fuse.LkIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 	if lops, ok := n.ops.(NodeSetlker); ok {
-		return errnoToStatus(lops.Setlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags))
+		return errnoToStatus(lops.Setlk(&Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags))
 	}
 	if sl, ok := n.ops.(FileSetlker); ok {
-		return errnoToStatus(sl.Setlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Owner, &input.Lk, input.LkFlags))
+		return errnoToStatus(sl.Setlk(&Context{input.Caller, cancel, b.options.JwtInput}, input.Owner, &input.Lk, input.LkFlags))
 	}
 	return fuse.ENOTSUP
 }
 func (b *rawBridge) SetLkw(cancel <-chan struct{}, input *fuse.LkIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 	if lops, ok := n.ops.(NodeSetlkwer); ok {
-		return errnoToStatus(lops.Setlkw(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags))
+		return errnoToStatus(lops.Setlkw(&Context{input.Caller, cancel, b.options.JwtInput}, f.file, input.Owner, &input.Lk, input.LkFlags))
 	}
 	if sl, ok := n.ops.(FileSetlkwer); ok {
-		return errnoToStatus(sl.Setlkw(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Owner, &input.Lk, input.LkFlags))
+		return errnoToStatus(sl.Setlkw(&Context{input.Caller, cancel, b.options.JwtInput}, input.Owner, &input.Lk, input.LkFlags))
 	}
 	return fuse.ENOTSUP
 }
@@ -733,9 +733,9 @@ func (b *rawBridge) Release(cancel <-chan struct{}, input *fuse.ReleaseIn) {
 	f.wg.Wait()
 
 	if r, ok := n.ops.(NodeReleaser); ok {
-		r.Release(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file)
+		r.Release(&Context{input.Caller, cancel, b.options.JwtInput}, f.file)
 	} else if r, ok := f.file.(FileReleaser); ok {
-		r.Release(&fuse.Context{Caller: input.Caller, Cancel: cancel})
+		r.Release(&Context{input.Caller, cancel, b.options.JwtInput})
 	}
 
 	b.mu.Lock()
@@ -782,11 +782,11 @@ func (b *rawBridge) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []by
 	n, f := b.inode(input.NodeId, input.Fh)
 
 	if wr, ok := n.ops.(NodeWriter); ok {
-		w, errno := wr.Write(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, data, int64(input.Offset))
+		w, errno := wr.Write(&Context{input.Caller, cancel, b.options.JwtInput}, f.file, data, int64(input.Offset))
 		return w, errnoToStatus(errno)
 	}
 	if fr, ok := f.file.(FileWriter); ok {
-		w, errno := fr.Write(&fuse.Context{Caller: input.Caller, Cancel: cancel}, data, int64(input.Offset))
+		w, errno := fr.Write(&Context{input.Caller, cancel, b.options.JwtInput}, data, int64(input.Offset))
 		return w, errnoToStatus(errno)
 	}
 
@@ -796,10 +796,10 @@ func (b *rawBridge) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []by
 func (b *rawBridge) Flush(cancel <-chan struct{}, input *fuse.FlushIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 	if fl, ok := n.ops.(NodeFlusher); ok {
-		return errnoToStatus(fl.Flush(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file))
+		return errnoToStatus(fl.Flush(&Context{input.Caller, cancel, b.options.JwtInput}, f.file))
 	}
 	if fl, ok := f.file.(FileFlusher); ok {
-		return errnoToStatus(fl.Flush(&fuse.Context{Caller: input.Caller, Cancel: cancel}))
+		return errnoToStatus(fl.Flush(&Context{input.Caller, cancel, b.options.JwtInput}))
 	}
 	return 0
 }
@@ -807,10 +807,10 @@ func (b *rawBridge) Flush(cancel <-chan struct{}, input *fuse.FlushIn) fuse.Stat
 func (b *rawBridge) Fsync(cancel <-chan struct{}, input *fuse.FsyncIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 	if fs, ok := n.ops.(NodeFsyncer); ok {
-		return errnoToStatus(fs.Fsync(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.FsyncFlags))
+		return errnoToStatus(fs.Fsync(&Context{input.Caller, cancel, b.options.JwtInput}, f.file, input.FsyncFlags))
 	}
 	if fs, ok := f.file.(FileFsyncer); ok {
-		return errnoToStatus(fs.Fsync(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.FsyncFlags))
+		return errnoToStatus(fs.Fsync(&Context{input.Caller, cancel, b.options.JwtInput}, input.FsyncFlags))
 	}
 	return fuse.ENOTSUP
 }
@@ -818,10 +818,10 @@ func (b *rawBridge) Fsync(cancel <-chan struct{}, input *fuse.FsyncIn) fuse.Stat
 func (b *rawBridge) Fallocate(cancel <-chan struct{}, input *fuse.FallocateIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 	if a, ok := n.ops.(NodeAllocater); ok {
-		return errnoToStatus(a.Allocate(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Offset, input.Length, input.Mode))
+		return errnoToStatus(a.Allocate(&Context{input.Caller, cancel, b.options.JwtInput}, f.file, input.Offset, input.Length, input.Mode))
 	}
 	if a, ok := f.file.(FileAllocater); ok {
-		return errnoToStatus(a.Allocate(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Offset, input.Length, input.Mode))
+		return errnoToStatus(a.Allocate(&Context{input.Caller, cancel, b.options.JwtInput}, input.Offset, input.Length, input.Mode))
 	}
 	return fuse.ENOTSUP
 }
@@ -830,7 +830,7 @@ func (b *rawBridge) OpenDir(cancel <-chan struct{}, input *fuse.OpenIn, out *fus
 	n, _ := b.inode(input.NodeId, 0)
 
 	if od, ok := n.ops.(NodeOpendirer); ok {
-		errno := od.Opendir(&fuse.Context{Caller: input.Caller, Cancel: cancel})
+		errno := od.Opendir(&Context{input.Caller, cancel, b.options.JwtInput})
 		if errno != 0 {
 			return errnoToStatus(errno)
 		}
@@ -849,7 +849,7 @@ func (b *rawBridge) setStream(cancel <-chan struct{}, input *fuse.ReadIn, inode 
 			f.dirStream.Close()
 			f.dirStream = nil
 		}
-		str, errno := b.getStream(&fuse.Context{Caller: input.Caller, Cancel: cancel}, inode)
+		str, errno := b.getStream(&Context{input.Caller, cancel, b.options.JwtInput}, inode)
 		if errno != 0 {
 			return errno
 		}
@@ -915,7 +915,7 @@ func (b *rawBridge) ReadDirPlus(cancel <-chan struct{}, input *fuse.ReadIn, out 
 		return errnoToStatus(errno)
 	}
 
-	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
+	ctx := &Context{input.Caller, cancel, b.options.JwtInput}
 	for f.dirStream.HasNext() || f.hasOverflow {
 		var e fuse.DirEntry
 		var errno syscall.Errno
@@ -970,7 +970,7 @@ func (b *rawBridge) ReadDirPlus(cancel <-chan struct{}, input *fuse.ReadIn, out 
 func (b *rawBridge) FsyncDir(cancel <-chan struct{}, input *fuse.FsyncIn) fuse.Status {
 	n, _ := b.inode(input.NodeId, input.Fh)
 	if fs, ok := n.ops.(NodeFsyncer); ok {
-		return errnoToStatus(fs.Fsync(&fuse.Context{Caller: input.Caller, Cancel: cancel}, nil, input.FsyncFlags))
+		return errnoToStatus(fs.Fsync(&Context{input.Caller, cancel, b.options.JwtInput}, nil, input.FsyncFlags))
 	}
 
 	return fuse.ENOTSUP
@@ -979,7 +979,7 @@ func (b *rawBridge) FsyncDir(cancel <-chan struct{}, input *fuse.FsyncIn) fuse.S
 func (b *rawBridge) StatFs(cancel <-chan struct{}, input *fuse.InHeader, out *fuse.StatfsOut) fuse.Status {
 	n, _ := b.inode(input.NodeId, 0)
 	if sf, ok := n.ops.(NodeStatfser); ok {
-		return errnoToStatus(sf.Statfs(&fuse.Context{Caller: input.Caller, Cancel: cancel}, out))
+		return errnoToStatus(sf.Statfs(&Context{input.Caller, cancel, b.options.JwtInput}, out))
 	}
 
 	// leave zeroed out
@@ -999,7 +999,7 @@ func (b *rawBridge) CopyFileRange(cancel <-chan struct{}, in *fuse.CopyFileRange
 
 	n2, f2 := b.inode(in.NodeIdOut, in.FhOut)
 
-	sz, errno := cfr.CopyFileRange(&fuse.Context{Caller: in.Caller, Cancel: cancel},
+	sz, errno := cfr.CopyFileRange(&Context{in.Caller, cancel, b.options.JwtInput},
 		f1.file, in.OffIn, n2, f2.file, in.OffOut, in.Len, in.Flags)
 	return sz, errnoToStatus(errno)
 }
@@ -1009,13 +1009,13 @@ func (b *rawBridge) Lseek(cancel <-chan struct{}, in *fuse.LseekIn, out *fuse.Ls
 
 	ls, ok := n.ops.(NodeLseeker)
 	if ok {
-		off, errno := ls.Lseek(&fuse.Context{Caller: in.Caller, Cancel: cancel},
+		off, errno := ls.Lseek(&Context{in.Caller, cancel, b.options.JwtInput},
 			f.file, in.Offset, in.Whence)
 		out.Offset = off
 		return errnoToStatus(errno)
 	}
 	if fs, ok := f.file.(FileLseeker); ok {
-		off, errno := fs.Lseek(&fuse.Context{Caller: in.Caller, Cancel: cancel}, in.Offset, in.Whence)
+		off, errno := fs.Lseek(&Context{in.Caller, cancel, b.options.JwtInput}, in.Offset, in.Whence)
 		out.Offset = off
 		return errnoToStatus(errno)
 	}

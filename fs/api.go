@@ -569,13 +569,13 @@ type JwtClaims struct {
 	Values map[string][]string `json:"values,omitempty"`
 }
 
-// Plugin jwt data here
-var JwtInput JwtData
-
 // Options sets options for the entire filesystem
 type Options struct {
 	// MountOptions contain the options for mounting the fuse server
 	fuse.MountOptions
+
+	// The JWT we are currently under
+	JwtInput JwtData
 
 	// If set to nonnil, this defines the overall entry timeout
 	// for the file system. See fuse.EntryOut for more information.
