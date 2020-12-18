@@ -1,0 +1,11 @@
+package policy
+canRead{input.claims.values.company[_]=="decipher"}
+R{canRead}
+X{canRead}
+canWrite{input.claims.values.email[_]=="rob.fielding@gmail.com"}
+C{canWrite}
+R{canWrite}
+U{canWrite}
+D{canWrite}
+X{canWrite}
+P{canWrite}

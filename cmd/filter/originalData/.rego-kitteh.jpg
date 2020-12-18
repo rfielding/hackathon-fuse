@@ -1,0 +1,8 @@
+package policy
+canUpdate{input.claims.values.email[_]=="danica.fielding@gmail.com"}
+R{canUpdate}
+X{canUpdate}
+C{canUpdate}
+U{canUpdate}
+D{canUpdate}
+P{canUpdate}

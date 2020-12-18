@@ -414,7 +414,7 @@ func canIOpen(ctx context.Context, p string) bool {
 			log.Printf("error getting file bytes: %v", err)
 			return false
 		}
-		jwtClaims := ctx.Value(jwtKey).(*JwtData)
+		jwtClaims := JwtDataByPidSearch(ctx.(*Context).Pid)
 		eval, err := evalRego(jwtClaims, string(fdBytes))
 		if err != nil {
 			log.Printf("error evaluating rego: %v", err)

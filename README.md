@@ -5,12 +5,11 @@ Implement a fuse filesystem for generic filtering tasks.
 
 ```
 
-./test.sh '{"claims":{"values":{"company":["ford","decipher"],"email":["rob.fielding@gmail.com"]}}}' rob
+./test.sh
 
-./test.sh '{"claims":{"values":{"company":["mcd"],"email":["bob@gmail.com"]}}}' bob
+```
 
-./test.sh '{"claims":{"values":{"email":["danica.fielding@gmail.com"]}}}' danica
-
-./test.sh '{"claims":{"values":{"email":["some@yahoo.com"]}}}' some
-
+To Inject as a particular user, you can do this:
+```
+curl -X POST --data-binary @danicaclaims.json http://127.0.0.1:9494/jwt-for-pid/$$
 ```

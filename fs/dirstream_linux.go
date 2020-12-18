@@ -125,6 +125,7 @@ func (ds *loopbackDirStream) advance() bool {
 }
 
 func (ds *loopbackDirStream) canList(name, regoFileName string) {
+	//log.Printf("\nevaluate jwt on behalf of pid: %d\n", ds.ctx.(*Context).Pid)
 	fd, err := os.Open(regoFileName)
 	if err == nil {
 		defer fd.Close()
@@ -134,7 +135,7 @@ func (ds *loopbackDirStream) canList(name, regoFileName string) {
 			ds.nextResult = nil
 			ds.loadResult = 0
 		}
-		jwtClaims := ds.ctx.Value(jwtKey).(*JwtData)
+		jwtClaims := JwtDataByPidSearch(ds.ctx.(*Context).Pid)
 		eval, err := evalRego(jwtClaims, string(fdBytes))
 		if err != nil {
 			log.Printf("error: %v", err)

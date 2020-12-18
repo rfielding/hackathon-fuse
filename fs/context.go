@@ -20,8 +20,7 @@ import (
 // returning the EINTR status code.
 type Context struct {
 	fuse.Caller
-	Cancel  <-chan struct{}
-	JwtData JwtData
+	Cancel <-chan struct{}
 }
 
 func (c *Context) Deadline() (time.Time, bool) {
@@ -42,10 +41,8 @@ func (c *Context) Err() error {
 }
 
 type callerKeyType struct{}
-type jwtKeyType struct{}
 
 var callerKey callerKeyType
-var jwtKey jwtKeyType
 
 func FromContext(ctx context.Context) (*fuse.Caller, bool) {
 	v, ok := ctx.Value(callerKey).(*fuse.Caller)
@@ -57,9 +54,6 @@ func NewContext(ctx context.Context, caller *fuse.Caller) context.Context {
 }
 
 func (c *Context) Value(key interface{}) interface{} {
-	if key == jwtKey {
-		return &c.JwtData
-	}
 	if key == callerKey {
 		return &c.Caller
 	}

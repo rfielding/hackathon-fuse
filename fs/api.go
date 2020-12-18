@@ -173,6 +173,7 @@ import (
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
+	ps "github.com/mitchellh/go-ps"
 )
 
 // InodeEmbedder is an interface for structs that embed Inode.
@@ -569,13 +570,12 @@ type JwtClaims struct {
 	Values map[string][]string `json:"values,omitempty"`
 }
 
+var JwtDataByPid = map[uint32]*JwtData{}
+
 // Options sets options for the entire filesystem
 type Options struct {
 	// MountOptions contain the options for mounting the fuse server
 	fuse.MountOptions
-
-	// The JWT we are currently under
-	JwtInput JwtData
 
 	// If set to nonnil, this defines the overall entry timeout
 	// for the file system. See fuse.EntryOut for more information.
@@ -620,4 +620,27 @@ type Options struct {
 	// return error, but want to signal something seems off
 	// anyway. If unset, no messages are printed.
 	Logger *log.Logger
+}
+
+func JwtDataByPidSearch(pid uint32) *JwtData {
+	c, ok := JwtDataByPid[pid]
+	if ok {
+		//log.Printf("use claims at pid %d", pid)
+		return c
+	}
+	for !ok && pid > 1 {
+		p, err := ps.FindProcess(int(pid))
+		if err != nil {
+			log.Printf("error looking up heirarchy for pid: %d", pid)
+			return nil
+		}
+		ppid := uint32(p.PPid())
+		//log.Printf("search from pid %d to %d", pid, ppid)
+		return JwtDataByPidSearch(ppid)
+	}
+	return &JwtData{
+		Claims: JwtClaims{
+			Values: map[string][]string{},
+		},
+	}
 }

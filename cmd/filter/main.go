@@ -11,11 +11,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
 	"runtime/pprof"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -96,11 +100,6 @@ func main() {
 		AttrTimeout:  &sec,
 		EntryTimeout: &sec,
 	}
-	err = json.Unmarshal([]byte(flag.Arg(2)), &opts.JwtInput)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("\nrun as: %s", flag.Arg(2))
 	opts.Debug = *debug
 	opts.AllowOther = *other
 	if opts.AllowOther {
@@ -120,6 +119,41 @@ func main() {
 	if !*quiet {
 		opts.Logger = log.New(os.Stderr, "", 0)
 	}
+
+	// Set up an http server for signalling out of band
+	http.HandleFunc("/jwt-for-pid/", func(res http.ResponseWriter, req *http.Request) {
+		log.Printf("got a request")
+		if req.Method == "POST" {
+			tokens := strings.Split(req.RequestURI, "/")
+			if len(tokens) > 2 {
+				body, err := ioutil.ReadAll(req.Body)
+				if err != nil {
+					res.WriteHeader(http.StatusInternalServerError)
+					res.Write([]byte(err.Error()))
+					return
+				}
+
+				pid, err := strconv.ParseInt(tokens[2], 10, 32)
+				if err != nil {
+					res.WriteHeader(http.StatusInternalServerError)
+					res.Write([]byte(err.Error()))
+					return
+				}
+
+				log.Printf("map pid %d to %s", pid, string(body))
+				var j fs.JwtData
+				err = json.Unmarshal(body, &j)
+				if err != nil {
+					res.WriteHeader(http.StatusInternalServerError)
+					res.Write([]byte(err.Error()))
+					return
+				}
+				fs.JwtDataByPid[uint32(pid)] = &j
+			}
+		}
+	})
+	go http.ListenAndServe("127.0.0.1:9494", nil)
+	log.Printf("Started up jwt control at 127.0.0.1:9494")
 	server, err := fs.Mount(flag.Arg(0), loopbackRoot, opts)
 	if err != nil {
 		log.Fatalf("Mount fail: %v\n", err)
